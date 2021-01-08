@@ -70,7 +70,7 @@ func (p *Part) makeBar(total int64, progress *mpb.Progress, gate msgGate) *mpb.B
 			),
 			decor.AverageSpeed(decor.UnitKiB, "%.1f", decor.WCSyncSpace),
 			decor.OnComplete(decor.Name("", decor.WCSyncSpace), "Peak:"),
-			newSpeedPeak("%.1f", decor.WCSyncSpace),
+			newSpeedPeak(p.name, "%.1f", decor.WCSyncSpace),
 		),
 	)
 	return bar

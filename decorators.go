@@ -3,6 +3,7 @@ package getparty
 import (
 	"fmt"
 	"math"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -117,6 +118,7 @@ func (d *mainDecorator) Shutdown() {
 
 type peak struct {
 	decor.WC
+	name          string
 	format        string
 	msg           string
 	byteAcc       int64
@@ -125,9 +127,10 @@ type peak struct {
 	once          sync.Once
 }
 
-func newSpeedPeak(format string, wc decor.WC) decor.Decorator {
+func newSpeedPeak(name, format string, wc decor.WC) decor.Decorator {
 	d := &peak{
 		WC:            wc.Init(),
+		name:          name,
 		format:        format,
 		minDurPerByte: math.MaxInt64,
 	}
@@ -142,6 +145,13 @@ func (s *peak) EwmaUpdate(n int64, dur time.Duration) {
 		if durPerByte < s.minDurPerByte {
 			s.minDurPerByte = durPerByte
 		}
+		fmt.Fprintf(os.Stderr, "%s: byteAcc=%d durAcc=%d speed=%v max=%v\n",
+			s.name,
+			s.byteAcc,
+			s.durAcc,
+			decor.FmtAsSpeed(decor.SizeB1024(1e9/durPerByte)),
+			decor.FmtAsSpeed(decor.SizeB1024(1e9/s.minDurPerByte)),
+		)
 		s.byteAcc, s.durAcc = 0, 0
 	}
 }
@@ -152,6 +162,13 @@ func (s *peak) onComplete() {
 		if durPerByte < s.minDurPerByte {
 			s.minDurPerByte = durPerByte
 		}
+		fmt.Fprintf(os.Stderr, "%s: onComplete: byteAcc=%d durAcc=%d speed=%v max=%v\n",
+			s.name,
+			s.byteAcc,
+			s.durAcc,
+			decor.FmtAsSpeed(decor.SizeB1024(1e9/durPerByte)),
+			decor.FmtAsSpeed(decor.SizeB1024(1e9/s.minDurPerByte)),
+		)
 	}
 	if s.minDurPerByte == 0 {
 		s.msg = fmt.Sprintf(s.format, decor.FmtAsSpeed(decor.SizeB1024(0)))
