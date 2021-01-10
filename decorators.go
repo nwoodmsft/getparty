@@ -142,16 +142,19 @@ func (s *peak) EwmaUpdate(n int64, dur time.Duration) {
 	s.durAcc += int64(dur)
 	if s.byteAcc >= 1024*64 {
 		durPerByte := s.durAcc / s.byteAcc
+		if durPerByte == 0 {
+			fmt.Fprintf(os.Stderr, "%s: byteAcc=%d durAcc=%d durPerByte=%d minDurPerByte=%d\n",
+				s.name,
+				s.byteAcc,
+				s.durAcc,
+				durPerByte,
+				s.minDurPerByte,
+			)
+			return
+		}
 		if durPerByte < s.minDurPerByte {
 			s.minDurPerByte = durPerByte
 		}
-		fmt.Fprintf(os.Stderr, "%s: byteAcc=%d durAcc=%d speed=%v max=%v\n",
-			s.name,
-			s.byteAcc,
-			s.durAcc,
-			decor.FmtAsSpeed(decor.SizeB1024(1e9/durPerByte)),
-			decor.FmtAsSpeed(decor.SizeB1024(1e9/s.minDurPerByte)),
-		)
 		s.byteAcc, s.durAcc = 0, 0
 	}
 }
@@ -159,15 +162,15 @@ func (s *peak) EwmaUpdate(n int64, dur time.Duration) {
 func (s *peak) onComplete() {
 	if s.byteAcc > 0 {
 		durPerByte := s.durAcc / s.byteAcc
-		if durPerByte < s.minDurPerByte {
+		if durPerByte != 0 && durPerByte < s.minDurPerByte {
 			s.minDurPerByte = durPerByte
 		}
-		fmt.Fprintf(os.Stderr, "%s: onComplete: byteAcc=%d durAcc=%d speed=%v max=%v\n",
+		fmt.Fprintf(os.Stderr, "%s: onComplete: byteAcc=%d durAcc=%d durPerByte=%d minDurPerByte=%d\n",
 			s.name,
 			s.byteAcc,
 			s.durAcc,
-			decor.FmtAsSpeed(decor.SizeB1024(1e9/durPerByte)),
-			decor.FmtAsSpeed(decor.SizeB1024(1e9/s.minDurPerByte)),
+			durPerByte,
+			s.minDurPerByte,
 		)
 	}
 	if s.minDurPerByte == 0 {
