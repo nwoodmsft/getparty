@@ -1,4 +1,4 @@
-module github.com/vbauerster/getparty
+module github.com/nwoodmsft/getparty
 
 require (
 	github.com/VividCortex/ewma v1.2.0

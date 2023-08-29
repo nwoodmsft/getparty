@@ -12,7 +12,7 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/vbauerster/getparty"
+	"github.com/nwoodmsft/getparty"
 )
 
 var (
