@@ -506,7 +506,10 @@ func (cmd Cmd) getTransport(pooled bool) (transport *http.Transport, err error) 
 		if err != nil {
 			return nil, err
 		}
-		caCertPool := x509.NewCertPool()
+		caCertPool, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, err
+		}
 		caCertPool.AppendCertsFromPEM(caCerts)
 		transport.TLSClientConfig = &tls.Config{RootCAs: caCertPool}
 	}
