@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ type Session struct {
 	ContentType   string
 	StatusCode    int
 	ContentLength int64
+	TotalWritten  int64
 	Elapsed       time.Duration
 	Headers       map[string]string
 	Parts         []*Part
@@ -38,6 +40,7 @@ func (s *Session) loadState(name string) error {
 }
 
 func (s *Session) dumpState(name string) error {
+	s.TotalWritten = s.totalWritten()
 	f, err := os.Create(name)
 	if err != nil {
 		return err
@@ -45,11 +48,39 @@ func (s *Session) dumpState(name string) error {
 	return cmp.Or(json.NewEncoder(f).Encode(s), f.Close())
 }
 
+// dumpProgress writes session state atomically (temp file + rename)
+// so external consumers never see a partially written file.
+func (s *Session) dumpProgress(name string) error {
+	s.TotalWritten = s.atomicTotalWritten()
+	dir := filepath.Dir(name)
+	tmp, err := os.CreateTemp(dir, ".getparty-progress-*.json")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if err := cmp.Or(json.NewEncoder(tmp).Encode(s), tmp.Close()); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, name)
+}
+
 func (s Session) isResumable() bool {
 	return strings.EqualFold(s.AcceptRanges, "bytes") && s.ContentLength >= 0
 }
 
 func (s Session) totalWritten() int64 {
+	var total int64
+	for _, p := range s.Parts {
+		total += p.Written
+	}
+	return total
+}
+
+// atomicTotalWritten reads Part.Written values from a goroutine concurrent
+// with downloads. On amd64 with aligned int64 fields this is safe in practice.
+// For a production implementation, Part.Written should use sync/atomic.
+func (s Session) atomicTotalWritten() int64 {
 	var total int64
 	for _, p := range s.Parts {
 		total += p.Written

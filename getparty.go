@@ -96,6 +96,7 @@ type options struct {
 	Timeout     uint              `short:"t" long:"timeout" value-name:"sec" default:"10" description:"initial timeout to fill a buffer"`
 	BufferSize  uint              `short:"b" long:"buf-size" value-name:"KiB" choice:"2" choice:"4" choice:"8" choice:"16" default:"8" description:"buffer size, prefer smaller for slow connection"`
 	SpeedLimit  uint              `short:"l" long:"speed-limit" choice:"1" choice:"2" choice:"3" choice:"4" choice:"5" description:"speed limit gauge"`
+	Progress    uint              `long:"progress" value-name:"SEC" default:"0" description:"write progress to json file every SEC seconds, 0 to disable"`
 	SessionName string            `short:"s" long:"session" value-name:"FILE" description:"session state of incomplete download, file with json extension"`
 	UserAgent   string            `short:"U" long:"user-agent" choice:"chrome" choice:"firefox" choice:"safari" choice:"edge" description:"User-Agent header (default: getparty/ver)"`
 	AuthUser    string            `long:"username" description:"basic http auth username"`
@@ -361,6 +362,31 @@ func (m *Cmd) Run(args []string, version, commit string) (err error) {
 	start, cause := time.Now(), context.Cause(firstResp.ctx)
 	m.loggers[DBUG].Printf("First Response: %v", cause)
 
+	// Start progress file writer goroutine if enabled
+	var progressDone chan struct{}
+	if m.opt.Progress > 0 {
+		progressDone = make(chan struct{})
+		progressFile := session.OutputName + ".json"
+		if m.opt.SessionName == "" {
+			m.opt.SessionName = progressFile
+		}
+		interval := time.Duration(m.opt.Progress) * time.Second
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if err := session.dumpProgress(progressFile); err != nil {
+						m.loggers[DBUG].Printf("Progress file write error: %v", err)
+					}
+				case <-progressDone:
+					return
+				}
+			}
+		}()
+	}
+
 	switch {
 	case errors.Is(cause, modeFallback):
 		if session.restored {
@@ -390,6 +416,11 @@ func (m *Cmd) Run(args []string, version, commit string) (err error) {
 	default:
 		err = eg.Wait()
 		session.Elapsed += time.Since(start)
+	}
+
+	// Stop progress writer goroutine
+	if progressDone != nil {
+		close(progressDone)
 	}
 
 	if err != nil {
